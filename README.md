@@ -11,18 +11,19 @@
 1. Подключитесь к вашему VPS по SSH.
 2. Склонируйте этот репозиторий или просто скачайте скрипт:
    ```bash
-   curl -O [https://raw.githubusercontent.com/BSetiStudio/matgproxy/main/proxy.py](https://raw.githubusercontent.com/BSetiStudio/matgproxy/main/proxy.py)
+   curl -O https://raw.githubusercontent.com/BSetiStudio/matgproxy/main/proxy.py
 3. Запустите скрипт:
 
-python3 proxy.py
+   ```bash
+   python3 proxy.py
 
 4. Cкрипт сам установит Docker (если его нет), запустит контейнер и выдаст вам готовую ссылку вида https://t.me/proxy?... для клика.
 
 ## Как остановить прокси
 Если решите удалить или выключить прокси, выполните команды:
-
-sudo docker stop telegram-proxy
-sudo docker rm telegram-proxy
+   ```bash
+   sudo docker stop telegram-proxy
+   sudo docker rm telegram-proxy
 
 
 💡 Маленький совет по безопасности:
