@@ -16,7 +16,7 @@ def load_config():
     global PORT, USER, PASSWORD
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, "text", encoding="utf-8") as f:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 lines = f.read().splitlines()
                 if len(lines) >= 3:
                     PORT = int(lines[0])
@@ -40,7 +40,7 @@ load_config()
 
 
 async def handle_client(reader, writer):
-    """Асинхронная обработка трафика SOCKS5 с динамическими учетными данными."""
+    """Асинхронная обработка трафика SOCKS5."""
     try:
         header = await reader.readexactly(2)
         if header[0] != 0x05:
@@ -69,7 +69,6 @@ async def handle_client(reader, writer):
         pass_len = (await reader.readexactly(1))[0]
         password = (await reader.readexactly(pass_len)).decode()
 
-        # Сверяем с актуальными глобальными переменными
         if username != USER or password != PASSWORD:
             writer.write(b"\x01\x01")
             await writer.drain()
@@ -137,7 +136,6 @@ def setup_systemd_and_cli():
     """Регистрация службы systemd и создание глобальной команды matg."""
     script_path = os.path.abspath(__file__)
 
-    # Создаем службу
     service_content = f"""[Unit]
 Description=Telegram SOCKS5 Proxy Server
 After=network.target
@@ -150,7 +148,8 @@ ExecStart=/usr/bin/python3 {script_path} --daemon
 Restart=always
 RestartSec=5
 
-[Unit]
+[Install]
+WantedBy=multi-user.target
 """
     try:
         with open("/etc/systemd/system/tg-proxy.service", "w") as f:
@@ -163,13 +162,12 @@ RestartSec=5
 
         # Создаем ярлык для вызова через 'matg' из любой папки
         cli_path = "/usr/local/bin/matg"
-        if not os.path.exists(cli_path):
-            with open(cli_path, "w") as f:
-                f.write(f"#!/bin/bash\nsudo python3 {script_path}\n")
-            subprocess.run(f"sudo chmod +x {cli_path}", shell=True, check=True)
+        with open(cli_path, "w") as f:
+            f.write(f"#!/bin/bash\nsudo python3 {script_path}\n")
+        subprocess.run(f"sudo chmod +x {cli_path}", shell=True, check=True)
 
     except Exception as e:
-        print(f"Ошибка инициализации: {e}")
+        print(f"Ошибка инициализации системных файлов: {e}")
 
 
 def get_tg_link():
@@ -258,7 +256,6 @@ def show_menu():
         elif choice == "6":
             print("\n Перезапуск службы...")
             save_config()
-            # Обновляем порт в файле службы systemd, чтобы система знала, где запускать daemon
             setup_systemd_and_cli()
             subprocess.run("sudo systemctl restart tg-proxy", shell=True)
             print(" Прокси успешно перезапущен!")
@@ -281,21 +278,20 @@ async def run_server():
 
 
 if __name__ == "__main__":
-    # Если запущен скрипт самой системой в фоне
     if "--daemon" in sys.argv:
         asyncio.run(run_server())
     else:
-        # Если запущен пользователем вручную (первый раз или через команду matg)
+        # Если запускаем первый раз — создаем окружение и запускаем фон
         if not os.path.exists("/etc/systemd/system/tg-proxy.service"):
             print("Первый запуск: инициализация системы...")
             save_config()
             setup_systemd_and_cli()
             subprocess.run("sudo systemctl start tg-proxy", shell=True)
             print(
-                "\n Настройка завершена! Команда matg зарегистрирована в системе."
+                "\n Настройка завершена! Команда 'matg' зарегистрирована в системе."
             )
             print(f" Ваша ссылка для Telegram:\n{get_tg_link()}")
             sys.exit(0)
 
-        # Открываем интерактивное меню настройки
+        # Если система уже инициализирована, то обычный вызов показывает меню
         show_menu()
