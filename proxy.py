@@ -10,9 +10,8 @@ CONFIG_FILE = "/etc/tg_proxy_config.txt"
 PORT = 2834
 USER = "tg_user"
 PASSWORD = secrets.token_hex(8)
-LANG = "ru"  # по умолчанию
+LANG = "ru"
 
-# Локализация (Языковые пакеты)
 STRINGS = {
     "ru": {
         "title": "         УПРАВЛЕНИЕ ТЕЛЕГРАМ ПРОКСИ [matg]        ",
@@ -92,7 +91,6 @@ STRINGS = {
     },
 }
 
-
 def load_config():
     global PORT, USER, PASSWORD, LANG
     if os.path.exists(CONFIG_FILE):
@@ -107,7 +105,6 @@ def load_config():
         except Exception:
             pass
 
-
 def save_config():
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -115,12 +112,9 @@ def save_config():
     except Exception as e:
         print(f"Error saving config: {e}")
 
-
 load_config()
 
-
 async def handle_client(reader, writer):
-    """Асинхронный SOCKS5 движок."""
     try:
         header = await reader.readexactly(2)
         if header[0] != 0x05:
@@ -198,7 +192,6 @@ async def handle_client(reader, writer):
     except Exception:
         writer.close()
 
-
 def setup_systemd_and_cli():
     script_path = os.path.abspath(__file__)
     service_content = f"""[Unit]
@@ -230,9 +223,7 @@ WantedBy=multi-user.target
     except Exception as e:
         print(f"System setup error: {e}")
 
-
 def full_uninstall():
-    """Полное удаление всех следов скрипта из системы."""
     txt = STRINGS[LANG]
     print(txt["uninstalling"])
     subprocess.run("sudo systemctl stop tg-proxy.service 2>/dev/null", shell=True)
@@ -244,16 +235,13 @@ def full_uninstall():
     subprocess.run("sudo rm /usr/local/bin/matg 2>/dev/null", shell=True)
     subprocess.run(f"sudo rm {CONFIG_FILE} 2>/dev/null", shell=True)
     print(txt["uninstalled"])
-    # Самоудаление самого файла скрипта (опционально, но чисто корчует всё)
     try:
         os.remove(os.path.abspath(__file__))
     except Exception:
         pass
     sys.exit(0)
 
-
 def test_telegram_speed():
-    """Замер пинга и скорости скачивания напрямую с серверов Telegram."""
     txt = STRINGS[LANG]
     print(txt["testing"])
     test_url = "https://core.telegram.org/cleanhtml"
@@ -275,6 +263,7 @@ def test_telegram_speed():
         return
 
     avg_ping = sum(pings) / len(pings)
+    speed_mbps = 0.0
 
     # 2. Замеряем скорость загрузки
     try:
@@ -283,11 +272,142 @@ def test_telegram_speed():
         with urllib.request.urlopen(req, timeout=5) as r:
             data = r.read()
         duration = time.time() - t0
-        data_size_bits = len(data) * 8
-        speed_mbps = (data_size_bits / duration) / (1024 * 1024)
+        if duration > 0:
+            data_size_bits = len(data) * 8
+            speed_mbps = (data_size_bits / duration) / (1024 * 1024)
     except Exception:
-        speed_mbps = 0.0
+        pass
 
     print("\n" + "=" * 40)
     print(txt["test_res"].format(avg_ping, speed_mbps))
     print("=" * 40)
+
+def get_tg_link():
+    try:
+        ip = (
+            urllib.request.urlopen("https://ifconfig.me/ip", timeout=3)
+            .read()
+            .decode()
+            .strip()
+        )
+    except Exception:
+        ip = "31.76.225.186"
+    return f"https://t.me/socks?server={ip}&port={PORT}&user={USER}&pass={PASSWORD}"
+
+def show_menu():
+    global PORT, USER, PASSWORD
+    while True:
+        txt = STRINGS[LANG]
+        os.system("clear")
+        print("=" * 50)
+        print(txt["title"])
+        print("=" * 50)
+        print(txt["status"], end="")
+        status = subprocess.run(
+            "systemctl is-active tg-proxy",
+            shell=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        if status == "active":
+            print("\033[92m" + txt["active"].format(PORT) + "\033[0m")
+        else:
+            print("\033[91m" + txt["inactive"] + "\033[0m")
+
+        print(txt["login"].format(USER))
+        print(txt["pass"].format(PASSWORD))
+        print("-" * 50)
+        print(txt["opt1"])
+        print(txt["opt2"])
+        print(txt["opt3"])
+        print(txt["opt4"])
+        print(txt["opt5"])
+        print(txt["opt6"])
+        print(txt["opt7"])
+        print(txt["opt8"])
+        print("\033[91m" + txt["opt9"] + "\033[0m")
+        print(txt["opt0"])
+        print("=" * 50)
+
+        choice = input(txt["choice"]).strip()
+
+        if choice == "1":
+            print(txt["link_title"])
+            print(f"\033[94m{get_tg_link()}\033[0m")
+            input(txt["press_enter"])
+        elif choice == "2":
+            new_port = input(txt["enter_port"].format(PORT)).strip()
+            if new_port.isdigit():
+                PORT = int(new_port)
+                save_config()
+                print(txt["port_changed"])
+            input(txt["press_enter"])
+        elif choice == "3":
+            new_user = input(txt["enter_login"].format(USER)).strip()
+            if new_user:
+                USER = new_user
+                save_config()
+                print(txt["login_changed"])
+            input(txt["press_enter"])
+        elif choice == "4":
+            new_pass = input(txt["enter_pass"].format(PASSWORD)).strip()
+            if new_pass:
+                PASSWORD = new_pass
+                save_config()
+                print(txt["pass_changed"])
+            input(txt["press_enter"])
+        elif choice == "5":
+            PASSWORD = secrets.token_hex(8)
+            save_config()
+            print(txt["new_pass_gen"].format(PASSWORD))
+            input(txt["press_enter"])
+        elif choice == "6":
+            print(txt["restarting"])
+            save_config()
+            setup_systemd_and_cli()
+            subprocess.run("sudo systemctl restart tg-proxy", shell=True)
+            print(txt["restarted"])
+            input(txt["press_enter"])
+        elif choice == "7":
+            print(txt["stopping"])
+            subprocess.run("sudo systemctl stop tg-proxy", shell=True)
+            print(txt["stopped"])
+            input(txt["press_enter"])
+        elif choice == "8":
+            test_telegram_speed()
+            input(txt["press_enter"])
+        elif choice == "9":
+            confirm = input(
+                "\n Вы уверены, что хотите УДАЛИТЬ всё? (y/n) / Are you sure? (y/n): "
+            ).strip()
+            if confirm.lower() in ["y", "yes", "д", "да"]:
+                full_uninstall()
+        elif choice == "0":
+            break
+
+async def run_server():
+    server = await asyncio.start_server(handle_client, "0.0.0.0", PORT)
+    async with server:
+        await server.serve_forever()
+
+if __name__ == "__main__":
+    if "--daemon" in sys.argv:
+        asyncio.run(run_server())
+    else:
+        if not os.path.exists("/etc/systemd/system/tg-proxy.service"):
+            os.system("clear")
+            print("Choose language. (Выберите язык прокси-панели)")
+            print("1. English")
+            print("2. Русский")
+            l_choice = input("Select (1-2): ").strip()
+            LANG = "en" if l_choice == "1" else "ru"
+
+            print(STRINGS[LANG]["restarting"])
+            save_config()
+            setup_systemd_and_cli()
+            subprocess.run("sudo systemctl start tg-proxy", shell=True)
+            print(STRINGS[LANG]["init_done"])
+            print(f"{STRINGS[LANG]['link_title']}\n{get_tg_link()}")
+            sys.exit(0)
+
+        show_menu()
