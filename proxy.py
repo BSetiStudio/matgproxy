@@ -3,67 +3,142 @@ import os
 import secrets
 import subprocess
 import sys
+import time
+import urllib.request
 
-# Путь для сохранения настроек, чтобы они не терялись при перезапуске
 CONFIG_FILE = "/etc/tg_proxy_config.txt"
 PORT = 2834
 USER = "tg_user"
 PASSWORD = secrets.token_hex(8)
+LANG = "ru"  # по умолчанию
+
+# Локализация (Языковые пакеты)
+STRINGS = {
+    "ru": {
+        "title": "         УПРАВЛЕНИЕ ТЕЛЕГРАМ ПРОКСИ [matg]        ",
+        "status": " Текущий статус службы: ",
+        "active": "РАБОТАЕТ (ПОРТ: {})",
+        "inactive": "ОСТАНОВЛЕН",
+        "login": " Текущий Логин:  {}",
+        "pass": " Текущий Пароль: {}",
+        "opt1": " 1. Показать ссылку для подключения в Telegram",
+        "opt2": " 2. Изменить ПОРТ прокси",
+        "opt3": " 3. Изменить ЛОГИН",
+        "opt4": " 4. Изменить ПАРОЛЬ",
+        "opt5": " 5. Сгенерировать новый случайный пароль",
+        "opt6": " 6. Запустить / Перезапустить прокси",
+        "opt7": " 7. Остановить прокси",
+        "opt8": " 8. Тест скорости и пинга до Telegram",
+        "opt9": " 9. ПОЛНОЕ УДАЛЕНИЕ (Деинсталляция)",
+        "opt0": " 0. Выйти из меню",
+        "choice": "Выберите действие (0-9): ",
+        "link_title": "\n Ссылка для Telegram:",
+        "press_enter": "\nНажмите Enter для возврата в меню...",
+        "enter_port": "\nВведите новый порт (сейчас {}): ",
+        "port_changed": " Порт изменен. Не забудьте перезапустить прокси (пункт 6).",
+        "enter_login": "\nВведите новый логин (сейчас {}): ",
+        "login_changed": " Логин изменен.",
+        "enter_pass": "\nВведите новый пароль (сейчас {}): ",
+        "pass_changed": " Пароль изменен.",
+        "new_pass_gen": " Сгенерирован новый пароль: {}",
+        "restarting": "\n Перезапуск службы...",
+        "restarted": " Прокси успешно перезапущен!",
+        "stopping": "\n Остановка службы...",
+        "stopped": " Прокси остановлен.",
+        "testing": "\nТестирование скорости соединения с Telegram...",
+        "test_res": " Результаты теста:\n   - Пинг: {:.1f} мс\n   - Скорость скачивания: {:.2f} Мбит/с",
+        "test_fail": " Ошибка теста: Серверы Telegram недоступны с этого VPS.",
+        "uninstalling": "\nНачинаем полное удаление прокси из системы...",
+        "uninstalled": "Прокси полностью удален. Команда matg больше недоступна.",
+        "init_done": "\n Настройка завершена! Команда 'matg' зарегистрирована.",
+    },
+    "en": {
+        "title": "         TELEGRAM PROXY MANAGEMENT [matg]        ",
+        "status": " Current service status: ",
+        "active": "RUNNING (PORT: {})",
+        "inactive": "STOPPED",
+        "login": " Current Username: {}",
+        "pass": " Current Password: {}",
+        "opt1": " 1. Show Telegram connection link",
+        "opt2": " 2. Change proxy PORT",
+        "opt3": " 3. Change USERNAME",
+        "opt4": " 4. Change PASSWORD",
+        "opt5": " 5. Generate new random password",
+        "opt6": " 6. Start / Restart proxy",
+        "opt7": " 7. Stop proxy",
+        "opt8": " 8. Speed and Ping test to Telegram",
+        "opt9": " 9. FULL UNINSTALL (Remove completely)",
+        "opt0": " 0. Exit menu",
+        "choice": "Select action (0-9): ",
+        "link_title": "\n Telegram Link:",
+        "press_enter": "\nPress Enter to return to menu...",
+        "enter_port": "\nEnter new port (current {}): ",
+        "port_changed": " Port changed. Don't forget to restart proxy (option 6).",
+        "enter_login": "\nEnter new username (current {}): ",
+        "login_changed": " Username changed.",
+        "enter_pass": "\nEnter new password (current {}): ",
+        "pass_changed": " Password changed.",
+        "new_pass_gen": " New password generated: {}",
+        "restarting": "\n Restarting service...",
+        "restarted": " Proxy successfully restarted!",
+        "stopping": "\n Stopping service...",
+        "stopped": " Proxy stopped.",
+        "testing": "\nTesting speed and ping to Telegram...",
+        "test_res": " Test Results:\n   - Ping: {:.1f} ms\n   - Download Speed: {:.2f} Mbps",
+        "test_fail": " Test failed: Telegram cores are unreachable from this VPS.",
+        "uninstalling": "\nStarting full uninstallation from the system...",
+        "uninstalled": "Proxy completely removed. The 'matg' command is now disabled.",
+        "init_done": "\n Setup complete! Command 'matg' is registered.",
+    },
+}
 
 
 def load_config():
-    """Загрузка сохраненного порта, логина и пароля."""
-    global PORT, USER, PASSWORD
+    global PORT, USER, PASSWORD, LANG
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 lines = f.read().splitlines()
-                if len(lines) >= 3:
+                if len(lines) >= 4:
                     PORT = int(lines[0])
                     USER = lines[1]
                     PASSWORD = lines[2]
+                    LANG = lines[3]
         except Exception:
             pass
 
 
 def save_config():
-    """Сохранение текущих настроек в файл."""
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            f.write(f"{PORT}\n{USER}\n{PASSWORD}\n")
+            f.write(f"{PORT}\n{USER}\n{PASSWORD}\n{LANG}\n")
     except Exception as e:
-        print(f"Ошибка сохранения конфига: {e}")
+        print(f"Error saving config: {e}")
 
 
-# Загружаем настройки, если они уже есть
 load_config()
 
 
 async def handle_client(reader, writer):
-    """Асинхронная обработка трафика SOCKS5."""
+    """Асинхронный SOCKS5 движок."""
     try:
         header = await reader.readexactly(2)
         if header[0] != 0x05:
             writer.close()
             return
-
         nmethods = header[1]
         methods = await reader.readexactly(nmethods)
-
         if 0x02 not in methods:
             writer.write(b"\x05\xff")
             await writer.drain()
             writer.close()
             return
-
         writer.write(b"\x05\x02")
         await writer.drain()
-
         auth_header = await reader.readexactly(2)
         if auth_header[0] != 0x01:
             writer.close()
             return
-
         user_len = auth_header[1]
         username = (await reader.readexactly(user_len)).decode()
         pass_len = (await reader.readexactly(1))[0]
@@ -74,20 +149,16 @@ async def handle_client(reader, writer):
             await writer.drain()
             writer.close()
             return
-
         writer.write(b"\x01\x00")
         await writer.drain()
-
         req_header = await reader.readexactly(4)
         cmd = req_header[1]
         atyp = req_header[3]
-
         if cmd != 0x01:
             writer.write(b"\x05\x07")
             await writer.drain()
             writer.close()
             return
-
         if atyp == 0x01:
             dest_addr = ".".join(str(b) for b in await reader.readexactly(4))
         elif atyp == 0x03:
@@ -96,9 +167,7 @@ async def handle_client(reader, writer):
         else:
             writer.close()
             return
-
         dest_port = int.from_bytes(await reader.readexactly(2), "big")
-
         try:
             remote_reader, remote_writer = await asyncio.open_connection(
                 dest_addr, dest_port
@@ -108,7 +177,6 @@ async def handle_client(reader, writer):
             await writer.drain()
             writer.close()
             return
-
         writer.write(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
         await writer.drain()
 
@@ -127,15 +195,12 @@ async def handle_client(reader, writer):
 
         asyncio.create_task(tunnel(reader, remote_writer))
         asyncio.create_task(tunnel(remote_reader, writer))
-
     except Exception:
         writer.close()
 
 
 def setup_systemd_and_cli():
-    """Регистрация службы systemd и создание глобальной команды matg."""
     script_path = os.path.abspath(__file__)
-
     service_content = f"""[Unit]
 Description=Telegram SOCKS5 Proxy Server
 After=network.target
@@ -154,144 +219,49 @@ WantedBy=multi-user.target
     try:
         with open("/etc/systemd/system/tg-proxy.service", "w") as f:
             f.write(service_content)
-
         subprocess.run("sudo systemctl daemon-reload", shell=True, check=True)
         subprocess.run(
             "sudo systemctl enable tg-proxy.service", shell=True, check=True
         )
-
-        # Создаем ярлык для вызова через 'matg' из любой папки
         cli_path = "/usr/local/bin/matg"
         with open(cli_path, "w") as f:
             f.write(f"#!/bin/bash\nsudo python3 {script_path}\n")
         subprocess.run(f"sudo chmod +x {cli_path}", shell=True, check=True)
-
     except Exception as e:
-        print(f"Ошибка инициализации системных файлов: {e}")
+        print(f"System setup error: {e}")
 
 
-def get_tg_link():
-    """Генерация ссылки для подключения."""
+def full_uninstall():
+    """Полное удаление всех следов скрипта из системы."""
+    txt = STRINGS[LANG]
+    print(txt["uninstalling"])
+    subprocess.run("sudo systemctl stop tg-proxy.service 2>/dev/null", shell=True)
+    subprocess.run(
+        "sudo systemctl disable tg-proxy.service 2>/dev/null", shell=True
+    )
+    subprocess.run("sudo rm /etc/systemd/system/tg-proxy.service", shell=True)
+    subprocess.run("sudo systemctl daemon-reload", shell=True)
+    subprocess.run("sudo rm /usr/local/bin/matg 2>/dev/null", shell=True)
+    subprocess.run(f"sudo rm {CONFIG_FILE} 2>/dev/null", shell=True)
+    print(txt["uninstalled"])
+    # Самоудаление самого файла скрипта (опционально, но чисто корчует всё)
     try:
-        import urllib.request
-
-        ip = (
-            urllib.request.urlopen("https://ifconfig.me/ip", timeout=3)
-            .read()
-            .decode()
-            .strip()
-        )
+        os.remove(os.path.abspath(__file__))
     except Exception:
-        ip = "31.76.225.186"
-    return f"https://t.me/socks?server={ip}&port={PORT}&user={USER}&pass={PASSWORD}"
+        pass
+    sys.exit(0)
 
 
-def show_menu():
-    """Интерактивное CLI меню для гибкой настройки."""
-    global PORT, USER, PASSWORD
-    while True:
-        os.system("clear")
-        print("=" * 50)
-        print("         УПРАВЛЕНИЕ ТЕЛЕГРАМ ПРОКСИ [matg]        ")
-        print("=" * 50)
-        print(f" Текущий статус службы: ", end="")
-        status = subprocess.run(
-            "systemctl is-active tg-proxy",
-            shell=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        if status == "active":
-            print("\033[92mРАБОТАЕТ (ПОРТ: {})\033[0m".format(PORT))
-        else:
-            print("\033[91mОСТАНОВЛЕН\033[0m")
+def test_telegram_speed():
+    """Замер пинга и скорости скачивания напрямую с серверов Telegram."""
+    txt = STRINGS[LANG]
+    print(txt["testing"])
+    # Используем официальный файл конфигурации Telegram для теста загрузки
+    test_url = "https://core.telegram.org/cleanhtml"
+    pings = []
 
-        print(f" Текущий Логин:  {USER}")
-        print(f" Текущий Пароль: {PASSWORD}")
-        print("-" * 50)
-        print(" 1. Показать ссылку для подключения в Telegram")
-        print(" 2. Изменить ПОРТ прокси")
-        print(" 3. Изменить ЛОГИН")
-        print(" 4. Изменить ПАРОЛЬ")
-        print(" 5. Сгенерировать новый случайный пароль")
-        print(" 6. Запустить / Перезапустить прокси")
-        print(" 7. Остановить прокси")
-        print(" 0. Выйти из меню")
-        print("=" * 50)
-
-        choice = input("Выберите действие (0-7): ").strip()
-
-        if choice == "1":
-            print("\n Ссылка для Telegram:")
-            print(f"\033[94m{get_tg_link()}\033[0m")
-            input("\nНажмите Enter для возврата в меню...")
-        elif choice == "2":
-            new_port = input(f"\nВведите новый порт (сейчас {PORT}): ").strip()
-            if new_port.isdigit():
-                PORT = int(new_port)
-                save_config()
-                print(" Порт изменен. Не забудьте перезапустить прокси (пункт 6).")
-            input("\nНажмите Enter...")
-        elif choice == "3":
-            new_user = input(f"\nВведите новый логин (сейчас {USER}): ").strip()
-            if new_user:
-                USER = new_user
-                save_config()
-                print(" Логин изменен.")
-            input("\nНажмите Enter...")
-        elif choice == "4":
-            new_pass = input(
-                f"\nВведите новый пароль (сейчас {PASSWORD}): "
-            ).strip()
-            if new_pass:
-                PASSWORD = new_pass
-                save_config()
-                print(" Пароль изменен.")
-            input("\nНажмите Enter...")
-        elif choice == "5":
-            PASSWORD = secrets.token_hex(8)
-            save_config()
-            print(f" Сгенерирован новый пароль: {PASSWORD}")
-            input("\nНажмите Enter...")
-        elif choice == "6":
-            print("\n Перезапуск службы...")
-            save_config()
-            setup_systemd_and_cli()
-            subprocess.run("sudo systemctl restart tg-proxy", shell=True)
-            print(" Прокси успешно перезапущен!")
-            input("\nНажмите Enter...")
-        elif choice == "7":
-            print("\n Остановка службы...")
-            subprocess.run("sudo systemctl stop tg-proxy", shell=True)
-            print(" Прокси остановлен.")
-            input("\nНажмите Enter...")
-        elif choice == "0":
-            print("\nВыход.")
-            break
-
-
-async def run_server():
-    """Запуск бесконечного сервера внутри демона systemd."""
-    server = await asyncio.start_server(handle_client, "0.0.0.0", PORT)
-    async with server:
-        await server.serve_forever()
-
-
-if __name__ == "__main__":
-    if "--daemon" in sys.argv:
-        asyncio.run(run_server())
-    else:
-        # Если запускаем первый раз — создаем окружение и запускаем фон
-        if not os.path.exists("/etc/systemd/system/tg-proxy.service"):
-            print("Первый запуск: инициализация системы...")
-            save_config()
-            setup_systemd_and_cli()
-            subprocess.run("sudo systemctl start tg-proxy", shell=True)
-            print(
-                "\n Настройка завершена! Команда 'matg' зарегистрирована в системе."
-            )
-            print(f" Ваша ссылка для Telegram:\n{get_tg_link()}")
-            sys.exit(0)
-
-        # Если система уже инициализирована, то обычный вызов показывает меню
-        show_menu()
+    # 1. Замеряем пинг (3 попытки HTTP Handshake)
+    for _ in range(3):
+        try:
+            t0 = time.time()
+            req = urllib.request.Request(test_url, headers={"User-Agent": "Mozilla/5.0"})
