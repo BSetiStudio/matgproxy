@@ -256,12 +256,38 @@ def test_telegram_speed():
     """Замер пинга и скорости скачивания напрямую с серверов Telegram."""
     txt = STRINGS[LANG]
     print(txt["testing"])
-    # Используем официальный файл конфигурации Telegram для теста загрузки
     test_url = "https://core.telegram.org/cleanhtml"
     pings = []
 
-    # 1. Замеряем пинг (3 попытки HTTP Handshake)
+    # 1. Замеряем пинг
     for _ in range(3):
         try:
             t0 = time.time()
             req = urllib.request.Request(test_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=3) as r:
+                r.read(100)
+            pings.append((time.time() - t0) * 1000)
+        except Exception:
+            pass
+
+    if not pings:
+        print(txt["test_fail"])
+        return
+
+    avg_ping = sum(pings) / len(pings)
+
+    # 2. Замеряем скорость загрузки
+    try:
+        t0 = time.time()
+        req = urllib.request.Request(test_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            data = r.read()
+        duration = time.time() - t0
+        data_size_bits = len(data) * 8
+        speed_mbps = (data_size_bits / duration) / (1024 * 1024)
+    except Exception:
+        speed_mbps = 0.0
+
+    print("\n" + "=" * 40)
+    print(txt["test_res"].format(avg_ping, speed_mbps))
+    print("=" * 40)
