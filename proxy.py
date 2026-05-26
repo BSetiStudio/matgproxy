@@ -5,7 +5,6 @@ import sys
 
 
 def run_command(command):
-    """Вспомогательная функция для запуска системных команд."""
     try:
         subprocess.run(command, shell=True, check=True)
     except subprocess.CalledProcessError as e:
@@ -14,53 +13,46 @@ def run_command(command):
 
 
 def main():
-    print("--- Настройка MTProto Прокси для Telegram ---")
+    print("--- Настройка стабильного SOCKS5 Прокси для Telegram ---")
 
-    # 1. Проверяем и останавливаем старый контейнер, если он существует
-    print("Очищаем старые контейнеры (если они были)...")
+    # 1. Очищаем старый контейнер MTProto
+    print("Удаляем старый MTProto контейнер...")
     subprocess.run("sudo docker stop telegram-proxy 2>/dev/null", shell=True)
     subprocess.run("sudo docker rm telegram-proxy 2>/dev/null", shell=True)
 
-    # 2. Проверяем, установлен ли docker
-    if subprocess.run("command -v docker", shell=True, capture_output=True).returncode != 0:
-        print("Docker не найден. Устанавливаем Docker...")
-        run_command("sudo apt-get update")
-        run_command("sudo apt-get install -y docker.io")
-    else:
-        print("Docker уже установлен.")
-
-    # 3. Генерируем случайный секретный ключ (32 символа в hex)
-    secret_raw = secrets.token_hex(16)
+    # 2. Генерируем случайный логин и пароль, чтобы прокси был только твоим
+    user = "tg_user"
+    password = secrets.token_hex(8)  # Случайный безопасный пароль
     
-    # НАСТРОЙКА ПОРТА: Твой проверенный рабочий порт
+    # Используем твой проверенный открытый порт
     port = 2834 
 
-    print(f"Генерируем чистый секрет: {secret_raw}")
     print(f"Настраиваем порт: {port}")
+    print(f"Создаем пользователя: {user}")
+    print(f"Пароль: {password}")
 
-    # 4. Запускаем продвинутый Docker-контейнер mtproto-proxy
-    # Этот образ идеально работает на любых портах и поддерживает Fake TLS (dd-префикс)
+    # 3. Запускаем проверенный и очень легкий SOCKS5 сервер (xkuma/socks5)
     docker_cmd = (
-        f"sudo docker run -d -p {port}:443 --name telegram-proxy --restart=always "
-        f"-e SECRET={secret_raw} seriyps/mtproto-proxy:latest"
+        f"sudo docker run -d -p {port}:1080 --name telegram-proxy --restart=always "
+        f"-e USER={user} -e PASS={password} xkuma/socks5:latest"
     )
     
-    print("Запускаем Docker-контейнер...")
+    print("Запускаем Docker-контейнер SOCKS5...")
     run_command(docker_cmd)
 
-    # 5. Получаем внешний IP-адрес сервера
+    # 4. Получаем IP сервера
     try:
         ip = subprocess.check_output("curl -s ifconfig.me", shell=True).decode('utf-8').strip()
     except Exception:
-        ip = "31.76.225.186"  # Твой IP как запасной вариант
+        ip = "31.76.225.186"
 
-    # 6. Формируем ссылку СРАЗУ с префиксом dd для глубокой маскировки
-    tg_link = f"https://t.me/proxy?server={ip}&port={port}&secret=dd{secret_raw}"
+    # 5. Ссылка для Telegram в формате SOCKS5
+    tg_link = f"https://t.me/socks?server={ip}&port={port}&user={user}&pass={password}"
     
     print("\n" + "="*50)
-    print("ПРОКСИ УСПЕШНО ЗАПУЩЕН!")
+    print("SOCKS5 ПРОКСИ УСПЕШНО ЗАПУЩЕН!")
     print("="*50)
-    print(f"Ссылка для подключения в Telegram (уже включает dd-префикс):\n{tg_link}")
+    print(f"Ссылка для подключения в Telegram:\n{tg_link}")
     print("="*50)
 
 
