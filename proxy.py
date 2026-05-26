@@ -33,11 +33,11 @@ def main():
     print(f"Генерируем секрет: {secret}")
     print(f"Настраиваем порт: {port}")
 
-    # 3. Запускаем официальный Docker-контейнер MTProto
+# 3. Запускаем официальный Docker-контейнер MTProto
     # Скачиваем образ и запускаем его в фоновом режиме (-d)
     docker_cmd = (
         f"sudo docker run -d -p {port}:443 --name telegram-proxy --restart=always "
-        f"-e SECRET={secret} telegramproxy/proxy:latest"
+        f"-e SECRET={secret} telegrammessenger/proxy:latest"
     )
     
     print("Запускаем Docker-контейнер...")
